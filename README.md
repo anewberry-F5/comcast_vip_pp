@@ -68,6 +68,21 @@ Or with standard python:
 streamlit run app.py
 ```
 
+### 4. Run via Docker / Docker Compose
+
+Using **Docker Compose**:
+```bash
+docker compose up -d
+```
+
+Or using **Docker**:
+```bash
+docker build -t comcast-vip-pp .
+docker run -d -p 8501:8501 --name comcast_vip_pp comcast-vip-pp
+```
+
+Then access the app at `http://localhost:8501`.
+
 ---
 
 ## 🖥️ How to Use

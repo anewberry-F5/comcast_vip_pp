@@ -1,0 +1,11 @@
+services:
+  comcast-vip-pp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: comcast_vip_pp_app
+    ports:
+      - "8501:8501"
+    restart: unless-stopped
+    environment:
+      - PYTHONUNBUFFERED=1
