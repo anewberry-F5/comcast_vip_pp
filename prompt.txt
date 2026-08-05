@@ -1,0 +1,19 @@
+create a tool that pulls the virtual ip information from a F5 big-ip. This tool will be used to check the status of virtual for pre and post migation from 1 f5 big-ip to another.
+
+Requirements:
+use python requests and streamlit
+create a UI using streamlit
+
+pre check Requirements:
+UI should have fields for username, password and F5 big-ip host. This will be used to authenticate to the big-ip.
+UI should have a pre-check button, click the button and it will pull the virtual name and ip from the big-ip determine the state and is the vip is http or https.
+only active and unknown virtual name, ip, port and if its http or https
+Then run a 3 curls against the ips, example curl -v http://<virtual IP>/ if vip is http or curl -v https://<virtual IP>/ is vip is https
+Temporarily store only active and unknown virtual name, ip, port and if its http or https
+output a table with virtual name, ip, port and if its http or https, and the HTTP response code that comes back from the 3 curls
+
+post check Requirements:
+UI should have a post-check button, click the button and it and it will run the same 3 curls and compare it to the pre-check curl output and display it in the UI
+
+
+
