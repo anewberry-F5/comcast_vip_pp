@@ -231,6 +231,15 @@ with tab_pre:
             mime="text/csv"
         )
 
+        # Troubleshooting Log Expander
+        with st.expander("🛠️ View Executed Commands & Debug Logs (Troubleshooting)"):
+            if "executed_command" in df_pre.columns:
+                df_logs = df_pre[["name", "ip", "port", "protocol", "executed_command", "probe_log"]].copy()
+                df_logs.columns = ["Virtual Name", "IP Address", "Port", "Protocol", "Command Executed", "Detailed Probe Logs"]
+                st.dataframe(df_logs, use_container_width=True, hide_index=True)
+            else:
+                st.info("No command logs recorded.")
+
 # -----------------------------------------------------------------------------
 # TAB 2: POST-CHECK
 # -----------------------------------------------------------------------------
@@ -337,6 +346,15 @@ with tab_post:
                 file_name="f5_vip_migration_comparison_report.csv",
                 mime="text/csv"
             )
+
+            # Troubleshooting Log Expander
+            with st.expander("🛠️ View Executed Commands & Debug Logs (Troubleshooting)"):
+                if st.session_state["post_check_results"]:
+                    df_post = pd.DataFrame(st.session_state["post_check_results"])
+                    if "executed_command" in df_post.columns:
+                        df_post_logs = df_post[["name", "ip", "port", "protocol", "executed_command", "probe_log"]].copy()
+                        df_post_logs.columns = ["Virtual Name", "IP Address", "Port", "Protocol", "Command Executed", "Detailed Probe Logs"]
+                        st.dataframe(df_post_logs, use_container_width=True, hide_index=True)
 
 # -----------------------------------------------------------------------------
 # TAB 3: FULL COMPARISON & AUDIT REPORT
