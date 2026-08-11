@@ -72,8 +72,8 @@ def execute_single_curl(protocol: str, ip: str, port: str, timeout: int = 5, use
         cmd = [
             "curl",
             ip_flag,
-            "-v",
             "-s",
+            "-S",  # Silent mode but show error on stderr if it fails
             "-o", "/dev/null",
             "-w", "%{http_code}",
             "--connect-timeout", str(timeout),
@@ -84,12 +84,21 @@ def execute_single_curl(protocol: str, ip: str, port: str, timeout: int = 5, use
         try:
             res = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout + 3)
             stdout = res.stdout.strip()
-            if stdout and stdout.isdigit() and stdout != "000":
-                return stdout
-            elif "Connection refused" in res.stderr or "couldn't connect" in res.stderr.lower():
+            
+            # Extract 3-digit HTTP response code (100-599)
+            match = re.search(r'\b([1-5]\d\d)\b', stdout)
+            if match:
+                code = match.group(1)
+                if code != "000":
+                    return code
+
+            stderr_lower = res.stderr.lower()
+            if "connection refused" in stderr_lower or "couldn't connect" in stderr_lower or "failed to connect" in stderr_lower:
                 return "ConnRefused"
-            elif "Timed out" in res.stderr or "Operation timed out" in res.stderr or "Timeout" in res.stderr:
+            elif "timed out" in stderr_lower or "operation timed out" in stderr_lower or "timeout" in stderr_lower:
                 return "Timeout"
+            elif "ssl" in stderr_lower or "certificate" in stderr_lower or "handshake" in stderr_lower:
+                return "SSLError"
             else:
                 return "Error"
         except subprocess.TimeoutExpired:
@@ -210,10 +219,11 @@ def probe_vip(vip: Dict[str, Any], runs: int = 3, timeout: int = 5, use_curl_cli
     port = str(vip.get("port", ""))
     
     response_codes = []
-    for _ in range(runs):
+    for i in range(runs):
         code = execute_single_probe(protocol, ip, port, timeout=timeout, use_curl_cli=use_curl_cli)
         response_codes.append(code)
-        time.sleep(0.1)
+        if i < runs - 1:
+            time.sleep(0.3)
 
     result = dict(vip)
     result["curl_codes"] = response_codes
