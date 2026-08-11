@@ -93,6 +93,15 @@ MOCK_VIRTUAL_SERVERS = [
             }
         },
         "profilesReference": {"items": [{"name": "http"}]}
+    },
+    {
+        "name": "/Common/vs_ipv6_portal_443",
+        "fullPath": "/Common/vs_ipv6_portal_443",
+        "destination": "/Common/2001:db8::1.443",
+        "enabled": True,
+        "disabled": False,
+        "status": {"availabilityState": "available", "enabledState": "enabled"},
+        "profilesReference": {"items": [{"name": "http"}, {"name": "clientssl"}]}
     }
 ]
 

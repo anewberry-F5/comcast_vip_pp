@@ -97,25 +97,43 @@ class F5Client:
     @staticmethod
     def parse_destination(destination_str: str) -> Tuple[str, str]:
         """
-        Parse destination string from F5 API format into IP and Port.
+        Parse destination string from F5 API format into IP and Port (supports IPv4 and IPv6).
         Examples:
         - '/Common/192.168.10.50:80' -> ('192.168.10.50', '80')
         - '/Common/10.0.0.1%1:443' -> ('10.0.0.1', '443')
+        - '/Common/2001:db8::1.80' -> ('2001:db8::1', '80')
+        - '/Common/[2001:db8::1]:80' -> ('2001:db8::1', '80')
         - '10.1.1.1:8080' -> ('10.1.1.1', '8080')
         """
         if not destination_str:
             return "", ""
         
         # Remove partition prefix e.g., /Common/
-        clean_dest = destination_str.split("/")[-1]
+        clean_dest = destination_str.split("/")[-1].strip()
         
         # Strip route domain suffix like %1
         if "%" in clean_dest:
             clean_dest = re.sub(r'%\d+', '', clean_dest)
-            
+
+        # Case 1: Bracketed IPv6 format e.g. [2001:db8::1]:80
+        if clean_dest.startswith("["):
+            match = re.match(r'^\[([^\]]+)\](?::(\d+))?$', clean_dest)
+            if match:
+                return match.group(1), match.group(2) or ""
+
+        # Case 2: Dot notation for IPv6 with port e.g. 2001:db8::1.80
+        if ":" in clean_dest and "." in clean_dest:
+            parts = clean_dest.rsplit(".", 1)
+            if parts[1].isdigit():
+                return parts[0], parts[1]
+
+        # Case 3: Standard colon notation (e.g. 192.168.10.50:80 or 2001:db8::1:80)
         if ":" in clean_dest:
             parts = clean_dest.rsplit(":", 1)
-            return parts[0], parts[1]
+            if parts[1].isdigit():
+                return parts[0], parts[1]
+            return clean_dest, ""
+
         return clean_dest, ""
 
     @classmethod

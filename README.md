@@ -9,12 +9,16 @@ A Python & Streamlit tool for performing pre-migration baseline audits and post-
 1. **Authentication & Discovery**:
    - Connects to F5 BIG-IP via iControl REST API (`/mgmt/tm/ltm/virtual`).
    - Supports Token Authentication and Basic Authentication.
-   - Parses Virtual Server Name, Destination IP Address, Port, and Operational State.
+   - Parses Virtual Server Name, Destination IP Address (IPv4 & IPv6), Port, and Operational State.
    - Detects whether each Virtual Server is **HTTP** or **HTTPS** based on port (e.g., 80 vs 443) and attached SSL profiles (`clientssl`, `serverssl`).
 
 2. **Filtering Rules**:
    - Automatically filters and retains **ONLY** Virtual Servers in **Active** or **Unknown** states (ignoring disabled or offline Virtual Servers).
    - Once active and unknown virtual servers are collected, queries `/mgmt/tm/ltm/virtual/<virtual_server_name>/stats` to inspect `status.availabilityState`. If `"description": "offline"`, the Virtual Server is excluded.
+
+3. **IPv4 & IPv6 Discovery & Probing**:
+   - **Step 1**: Discovers whether each Virtual Server IP address is **IPv4** or **IPv6**.
+   - **Step 2**: Formats URLs appropriately (brackets IPv6 addresses e.g. `http://[2001:db8::1]:80/`) and executes 3 curl probes using `-6` for IPv6 or `-4` for IPv4.
 
 3. **Pre-Check Baseline Workflow**:
    - Prompts for BIG-IP Host, Username, and Password in the UI.

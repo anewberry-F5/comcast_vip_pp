@@ -1,7 +1,27 @@
 from f5_client import F5Client
 from mock_data import get_mock_virtual_servers, simulate_mock_curl_checks
-from curl_checker import run_curl_checks_concurrently
+from curl_checker import run_curl_checks_concurrently, is_ipv6_address, execute_single_curl
 from comparator import compare_pre_and_post_results
+
+def test_ipv6_discovery():
+    print("0. Testing IPv4 vs IPv6 discovery & parsing...")
+    assert not is_ipv6_address("192.168.1.1"), "192.168.1.1 must be detected as IPv4"
+    assert not is_ipv6_address("10.0.50.25"), "10.0.50.25 must be detected as IPv4"
+    assert is_ipv6_address("2001:db8::1"), "2001:db8::1 must be detected as IPv6"
+    assert is_ipv6_address("[2001:db8::1]"), "[2001:db8::1] must be detected as IPv6"
+    assert is_ipv6_address("fe80::1ff:fe23:4567:890a"), "fe80::... must be detected as IPv6"
+
+    # Test F5 destination parser with IPv4 and IPv6 formats
+    ip4, port4 = F5Client.parse_destination("/Common/192.168.10.50:80")
+    assert ip4 == "192.168.10.50" and port4 == "80"
+
+    ip6_dot, port6_dot = F5Client.parse_destination("/Common/2001:db8::1.443")
+    assert ip6_dot == "2001:db8::1" and port6_dot == "443"
+
+    ip6_bracket, port6_bracket = F5Client.parse_destination("/Common/[2001:db8::1]:8443")
+    assert ip6_bracket == "2001:db8::1" and port6_bracket == "8443"
+
+    print(" - IPv4 vs IPv6 Discovery & Destination Parsing tests passed!")
 
 def test_full_pipeline():
     print("1. Testing mock virtual server processing...")
@@ -46,4 +66,5 @@ def test_full_pipeline():
     print("\n✅ ALL TESTS PASSED SUCCESSFULLY!")
 
 if __name__ == "__main__":
+    test_ipv6_discovery()
     test_full_pipeline()

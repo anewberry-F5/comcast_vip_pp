@@ -5,22 +5,54 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List, Dict, Any
 
+import ipaddress
+
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+def is_ipv6_address(ip_str: str) -> bool:
+    """
+    Step 1: Discover if the address is IPv4 or IPv6.
+    Returns True for IPv6 address, False for IPv4.
+    """
+    if not ip_str:
+        return False
+    clean_ip = str(ip_str).strip("[]").strip()
+    try:
+        return ipaddress.ip_address(clean_ip).version == 6
+    except ValueError:
+        # Fallback check for IPv6 colons
+        return ":" in clean_ip
 
 def execute_single_curl(protocol: str, ip: str, port: str, timeout: int = 5, use_curl_cli: bool = False) -> str:
     """
-    Executes a single HTTP/HTTPS curl check against a virtual IP.
+    Executes a single HTTP/HTTPS curl check against a virtual IP (supports IPv4 and IPv6).
+    Step 1: Discover if the address is IPv4 or IPv6.
+    Step 2: Construct target URL (bracketed for IPv6) and execute curl using -6 or -4.
     Returns HTTP response status code (e.g. '200', '302', '404', '500') or error reason (e.g. 'Timeout', 'ConnRefused').
     """
-    if not port or (protocol == "http" and port == "80") or (protocol == "https" and port == "443"):
-        target_url = f"{protocol}://{ip}/"
+    # Step 1: Discover if the address is IPv4 or IPv6
+    clean_ip = str(ip).strip()
+    is_v6 = is_ipv6_address(clean_ip)
+    raw_ip = clean_ip.strip("[]").strip()
+
+    # Step 2: Format host string (bracket IPv6 addresses for HTTP/HTTPS URLs)
+    if is_v6:
+        host_str = f"[{raw_ip}]"
     else:
-        target_url = f"{protocol}://{ip}:{port}/"
+        host_str = raw_ip
+
+    port_str = str(port).strip()
+    if not port_str or (protocol == "http" and port_str == "80") or (protocol == "https" and port_str == "443"):
+        target_url = f"{protocol}://{host_str}/"
+    else:
+        target_url = f"{protocol}://{host_str}:{port_str}/"
 
     if use_curl_cli:
-        # Construct CLI curl command: curl -v -s -o /dev/null -w "%{http_code}" --connect-timeout <timeout> -k <url>
+        # Construct CLI curl command with -6 for IPv6 or -4 for IPv4
+        ip_flag = "-6" if is_v6 else "-4"
         cmd = [
             "curl",
+            ip_flag,
             "-v",
             "-s",
             "-o", "/dev/null",
@@ -34,9 +66,9 @@ def execute_single_curl(protocol: str, ip: str, port: str, timeout: int = 5, use
             stdout = res.stdout.strip()
             if stdout and stdout.isdigit() and stdout != "000":
                 return stdout
-            elif "Connection refused" in res.stderr:
+            elif "Connection refused" in res.stderr or "couldn't connect" in res.stderr.lower():
                 return "ConnRefused"
-            elif "Timed out" in res.stderr or "Operation timed out" in res.stderr:
+            elif "Timed out" in res.stderr or "Operation timed out" in res.stderr or "Timeout" in res.stderr:
                 return "Timeout"
             else:
                 return "Error"
@@ -62,7 +94,7 @@ def execute_single_curl(protocol: str, ip: str, port: str, timeout: int = 5, use
         return "ConnRefused"
     except requests.exceptions.SSLError:
         return "SSLError"
-    except requests.exceptions.RequestException as e:
+    except requests.exceptions.RequestException:
         return "Error"
 
 def probe_vip(vip: Dict[str, Any], runs: int = 3, timeout: int = 5, use_curl_cli: bool = False) -> Dict[str, Any]:
