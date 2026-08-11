@@ -7,7 +7,26 @@ from typing import List, Dict, Any
 
 import ipaddress
 
+import ssl
+from requests.adapters import HTTPAdapter
+
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+class LegacyTLSAdapter(HTTPAdapter):
+    """
+    Custom HTTPAdapter that configures an SSLContext to allow legacy SSL/TLS versions
+    and ciphers (SECLEVEL=1) when probing F5 virtual servers with self-signed or legacy certs.
+    """
+    def init_poolmanager(self, *args, **kwargs):
+        ctx = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+        try:
+            ctx.set_ciphers('DEFAULT@SECLEVEL=1')
+        except Exception:
+            pass
+        kwargs['ssl_context'] = ctx
+        return super().init_poolmanager(*args, **kwargs)
 
 def is_ipv6_address(ip_str: str) -> bool:
     """
@@ -58,11 +77,12 @@ def execute_single_curl(protocol: str, ip: str, port: str, timeout: int = 5, use
             "-o", "/dev/null",
             "-w", "%{http_code}",
             "--connect-timeout", str(timeout),
+            "-m", str(timeout + 3),
             "-k",  # Ignore self-signed SSL errors
             target_url
         ]
         try:
-            res = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout + 2)
+            res = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout + 3)
             stdout = res.stdout.strip()
             if stdout and stdout.isdigit() and stdout != "000":
                 return stdout
@@ -78,9 +98,11 @@ def execute_single_curl(protocol: str, ip: str, port: str, timeout: int = 5, use
             # Fall back to requests library if curl CLI fails or is unavailable
             pass
 
-    # Requests library implementation
+    # Requests library implementation with Legacy TLS support
     try:
-        resp = requests.get(
+        session = requests.Session()
+        session.mount('https://', LegacyTLSAdapter())
+        resp = session.get(
             target_url,
             verify=False,
             timeout=timeout,
