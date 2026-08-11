@@ -195,9 +195,12 @@ class F5Client:
             has_udp_profile = any("udp" in p or "dns" in p for p in profiles) or ip_protocol == "udp"
 
             # Protocol detection logic: HTTPS, HTTP, UDP, or TCP
-            if port in ["443", "8443", "4433"] or has_ssl_profile:
+            # Port 80 is strictly HTTP to prevent SSL profiles from overriding port 80
+            if port == "80":
+                protocol = "http"
+            elif port in ["443", "8443", "4433"] or has_ssl_profile:
                 protocol = "https"
-            elif port in ["80", "8080", "8000"] or has_http_profile:
+            elif port in ["8080", "8000"] or has_http_profile:
                 protocol = "http"
             elif has_udp_profile or port == "53":
                 protocol = "udp"
