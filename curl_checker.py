@@ -2,11 +2,12 @@ import subprocess
 import requests
 import urllib3
 import time
+import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List, Dict, Any, Tuple
 
 import ipaddress
-
+import shutil
 import ssl
 from requests.adapters import HTTPAdapter
 
@@ -67,7 +68,8 @@ def execute_single_curl(protocol: str, ip: str, port: str, timeout: int = 5, use
     else:
         target_url = f"{protocol}://{host_str}:{port_str}/"
 
-    if use_curl_cli:
+    has_curl_cli = bool(shutil.which("curl"))
+    if use_curl_cli or has_curl_cli:
         # Construct CLI curl command with -6 for IPv6 or -4 for IPv4
         ip_flag = "-6" if is_v6 else "-4"
         cmd = [
@@ -107,13 +109,15 @@ def execute_single_curl(protocol: str, ip: str, port: str, timeout: int = 5, use
                 return "Error", cmd_str, log_detail
         except subprocess.TimeoutExpired:
             return "Timeout", cmd_str, f"Command timed out after {timeout + 3}s"
-        except Exception as e:
+        except Exception:
+            # Fall back to requests library if curl CLI fails or is unavailable
             pass
 
-    # Requests library implementation with Legacy TLS support
+    # Requests library implementation with Legacy TLS support and proxy bypass
     cmd_str = f"python requests.get('{target_url}', verify=False, timeout={timeout})"
     try:
         session = requests.Session()
+        session.trust_env = False  # Disable system HTTP_PROXY/HTTPS_PROXY environment variables
         session.mount('https://', LegacyTLSAdapter())
         resp = session.get(
             target_url,
