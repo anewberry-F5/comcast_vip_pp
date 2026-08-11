@@ -75,10 +75,11 @@ def execute_single_curl(protocol: str, ip: str, port: str, timeout: int = 5, use
         cmd = [
             "curl",
             ip_flag,
+            "-v",  # Full verbose request/response header logging
             "-s",
-            "-S",  # Silent mode but show error on stderr if it fails
+            "-S",  # Silent mode but show errors
             "-o", "/dev/null",
-            "-w", "%{http_code}",
+            "-w", "\n%{http_code}",
             "--connect-timeout", str(timeout),
             "-m", str(timeout + 3),
             "-k",  # Ignore self-signed SSL errors
@@ -90,23 +91,29 @@ def execute_single_curl(protocol: str, ip: str, port: str, timeout: int = 5, use
             stdout = res.stdout.strip()
             stderr = res.stderr.strip()
             
+            full_output = f"STDOUT: '{stdout}' | VERBOSE DETAILS:\n{stderr}".strip()
+
             # Extract 3-digit HTTP response code (100-599)
             match = re.search(r'\b([1-5]\d\d)\b', stdout)
+            code = "000"
             if match:
                 code = match.group(1)
-                if code != "000":
-                    return code, cmd_str, f"HTTP Code: {code} | stdout: '{stdout}'"
+
+            if code != "000":
+                return code, cmd_str, full_output
 
             stderr_lower = stderr.lower()
-            log_detail = f"stdout: '{stdout}' | stderr: '{stderr}'"
-            if "connection refused" in stderr_lower or "couldn't connect" in stderr_lower or "failed to connect" in stderr_lower:
-                return "ConnRefused", cmd_str, log_detail
-            elif "timed out" in stderr_lower or "operation timed out" in stderr_lower or "timeout" in stderr_lower:
-                return "Timeout", cmd_str, log_detail
+            # Prioritize Timeout detection before checking 'failed to connect'
+            if "timeout" in stderr_lower or "timed out" in stderr_lower or "operation timed out" in stderr_lower:
+                return "Timeout", cmd_str, full_output
+            elif "connection refused" in stderr_lower or "refused" in stderr_lower:
+                return "ConnRefused", cmd_str, full_output
+            elif "couldn't connect" in stderr_lower or "failed to connect" in stderr_lower:
+                return "ConnRefused", cmd_str, full_output
             elif "ssl" in stderr_lower or "certificate" in stderr_lower or "handshake" in stderr_lower:
-                return "SSLError", cmd_str, log_detail
+                return "SSLError", cmd_str, full_output
             else:
-                return "Error", cmd_str, log_detail
+                return "Error", cmd_str, full_output
         except subprocess.TimeoutExpired:
             return "Timeout", cmd_str, f"Command timed out after {timeout + 3}s"
         except Exception:
@@ -218,12 +225,15 @@ def execute_single_probe(protocol: str, ip: str, port: str, timeout: int = 5, us
     else:
         return execute_single_curl(protocol, ip, port, timeout=timeout, use_curl_cli=use_curl_cli)
 
-def probe_vip(vip: Dict[str, Any], runs: int = 3, timeout: int = 5, use_curl_cli: bool = False) -> Dict[str, Any]:
+def probe_vip(vip: Dict[str, Any], runs: int = 3, timeout: int = 5, use_curl_cli: bool = False, start_delay: float = 0.0) -> Dict[str, Any]:
     """
     Runs specified number of probes (default 3) against a single virtual IP.
     Executes HTTP/HTTPS curl checks or TCP/UDP netcat probes based on VIP protocol.
     Stores command executed and detailed probe logs.
     """
+    if start_delay > 0:
+        time.sleep(start_delay)
+
     protocol = vip.get("protocol", "http")
     ip = vip.get("ip", "")
     port = str(vip.get("port", ""))
@@ -260,8 +270,8 @@ def run_curl_checks_concurrently(vips: List[Dict[str, Any]], runs: int = 3, time
 
     with ThreadPoolExecutor(max_workers=min(max_workers, len(vips))) as executor:
         future_map = {
-            executor.submit(probe_vip, vip, runs, timeout, use_curl_cli): vip
-            for vip in vips
+            executor.submit(probe_vip, vip, runs, timeout, use_curl_cli, idx * 0.05): vip
+            for idx, vip in enumerate(vips)
         }
         for future in as_completed(future_map):
             try:
