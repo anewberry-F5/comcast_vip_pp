@@ -1,9 +1,10 @@
 # Use official Python 3.12 slim image
 FROM python:3.12-slim
 
-# Install system dependencies (curl for healthchecks & CLI curl mode, ca-certificates for HTTPS)
+# Install system dependencies (curl for healthchecks & CLI curl mode, netcat for TCP/UDP probes, ca-certificates for HTTPS)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
+    netcat-openbsd \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 

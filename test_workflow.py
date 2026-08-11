@@ -36,7 +36,7 @@ def test_full_pipeline():
     for p in filtered_vips:
         print(f" - {p['name']} | IP: {p['ip']} | Port: {p['port']} | Protocol: {p['protocol']} | State: {p['state']}")
         assert p['state'] in ['active', 'unknown'], "Filtered VIP state must be active or unknown"
-        assert p['protocol'] in ['http', 'https'], "Protocol must be http or https"
+        assert p['protocol'] in ['http', 'https', 'tcp', 'udp'], "Protocol must be http, https, tcp, or udp"
 
     processed_names = [p['name'] for p in filtered_vips]
     assert "/Common/vs_legacy_crm_80" not in processed_names, "Disabled VIP must be excluded"

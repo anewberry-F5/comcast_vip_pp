@@ -102,6 +102,24 @@ MOCK_VIRTUAL_SERVERS = [
         "disabled": False,
         "status": {"availabilityState": "available", "enabledState": "enabled"},
         "profilesReference": {"items": [{"name": "http"}, {"name": "clientssl"}]}
+    },
+    {
+        "name": "/Common/vs_ssh_jump_22",
+        "fullPath": "/Common/vs_ssh_jump_22",
+        "destination": "/Common/192.168.10.22:22",
+        "enabled": True,
+        "disabled": False,
+        "status": {"availabilityState": "available", "enabledState": "enabled"},
+        "profilesReference": {"items": [{"name": "tcp"}]}
+    },
+    {
+        "name": "/Common/vs_mysql_db_3306",
+        "fullPath": "/Common/vs_mysql_db_3306",
+        "destination": "/Common/10.0.50.33:3306",
+        "enabled": True,
+        "disabled": False,
+        "status": {"availabilityState": "available", "enabledState": "enabled"},
+        "profilesReference": {"items": [{"name": "tcp"}]}
     }
 ]
 
@@ -117,9 +135,12 @@ def simulate_mock_curl_checks(vips: List[Dict[str, Any]], is_post_check: bool = 
         res = dict(vip)
         name = vip.get("name", "")
         
+        proto = vip.get("protocol", "http").lower()
         if not is_post_check:
             # Pre-check baseline response codes
-            if "secure" in name or "portal" in name:
+            if proto in ["tcp", "udp"]:
+                codes = ["Succeeded", "Succeeded", "Succeeded"]
+            elif "secure" in name or "portal" in name:
                 codes = ["200", "200", "200"]
             elif "api" in name:
                 codes = ["401", "401", "401"]
@@ -129,7 +150,9 @@ def simulate_mock_curl_checks(vips: List[Dict[str, Any]], is_post_check: bool = 
                 codes = ["200", "200", "200"]
         else:
             # Post-check response codes (with 1 simulated change for demonstration)
-            if "partner" in name:
+            if proto in ["tcp", "udp"]:
+                codes = ["Succeeded", "Succeeded", "Succeeded"]
+            elif "partner" in name:
                 # Simulate a minor delta or timeout on post check for demo comparison
                 codes = ["302", "302", "302"]
             elif "api" in name:

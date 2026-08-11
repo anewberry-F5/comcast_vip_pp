@@ -180,8 +180,8 @@ class F5Client:
                 # Disregard any other availability states that are neither active nor unknown
                 continue
 
-            # Determine if VIP is HTTP or HTTPS
-            # Check profiles attached
+            # Extract attached profiles and ipProtocol
+            ip_protocol = str(item.get("ipProtocol", "")).lower()
             profiles = []
             prof_ref = item.get("profilesReference", {})
             if isinstance(prof_ref, dict):
@@ -192,12 +192,17 @@ class F5Client:
 
             has_ssl_profile = any("ssl" in p or "clientssl" in p for p in profiles)
             has_http_profile = any("http" in p for p in profiles)
+            has_udp_profile = any("udp" in p or "dns" in p for p in profiles) or ip_protocol == "udp"
 
-            # Protocol detection logic
-            if port == "443" or port == "8443" or port == "4433" or has_ssl_profile:
+            # Protocol detection logic: HTTPS, HTTP, UDP, or TCP
+            if port in ["443", "8443", "4433"] or has_ssl_profile:
                 protocol = "https"
-            else:
+            elif port in ["80", "8080", "8000"] or has_http_profile:
                 protocol = "http"
+            elif has_udp_profile or port == "53":
+                protocol = "udp"
+            else:
+                protocol = "tcp"
 
             processed_vips.append({
                 "name": name,

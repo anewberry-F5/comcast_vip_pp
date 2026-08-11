@@ -97,9 +97,91 @@ def execute_single_curl(protocol: str, ip: str, port: str, timeout: int = 5, use
     except requests.exceptions.RequestException:
         return "Error"
 
+def execute_single_netcat(protocol: str, ip: str, port: str, timeout: int = 5) -> str:
+    """
+    Executes a netcat (nc) check against a non-HTTP/HTTPS virtual server (TCP or UDP).
+    For TCP: nc -zv <hostname-or-ip> <port-number>
+    For UDP: nc -vuz <IP_OR_HOSTNAME> <PORT>
+    Looks for "succeeded" in netcat output.
+    """
+    clean_ip = str(ip).strip()
+    is_v6 = is_ipv6_address(clean_ip)
+    raw_ip = clean_ip.strip("[]").strip()
+    port_str = str(port).strip()
+
+    if not port_str:
+        return "Error"
+
+    proto_lower = protocol.lower()
+    if proto_lower == "udp":
+        cmd = ["nc", "-w", str(timeout), "-vuz", raw_ip, port_str]
+    else:  # tcp
+        cmd = ["nc", "-w", str(timeout), "-zv", raw_ip, port_str]
+
+    if is_v6:
+        cmd.insert(1, "-6")
+
+    try:
+        res = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout + 2)
+        full_output = (res.stdout + "\n" + res.stderr).lower()
+
+        # Look for "succeeded" in netcat output
+        if "succeeded" in full_output or "open" in full_output:
+            return "Succeeded"
+        elif "refused" in full_output or "connection refused" in full_output:
+            return "ConnRefused"
+        elif "timed out" in full_output or "timeout" in full_output:
+            return "Timeout"
+        elif res.returncode == 0:
+            return "Succeeded"
+        else:
+            return "Closed"
+    except subprocess.TimeoutExpired:
+        return "Timeout"
+    except Exception:
+        # Fallback to python socket probe if nc CLI is missing or errors out
+        return execute_socket_probe(proto_lower, raw_ip, int(port_str), is_v6, timeout)
+
+def execute_socket_probe(protocol: str, raw_ip: str, port: int, is_v6: bool, timeout: int = 5) -> str:
+    """
+    Fallback Python socket probe for TCP/UDP when netcat command line is unavailable.
+    """
+    import socket
+    family = socket.AF_INET6 if is_v6 else socket.AF_INET
+    try:
+        if protocol == "udp":
+            sock = socket.socket(family, socket.SOCK_DGRAM)
+            sock.settimeout(timeout)
+            sock.sendto(b"", (raw_ip, port))
+            sock.close()
+            return "Succeeded"
+        else:
+            sock = socket.socket(family, socket.SOCK_STREAM)
+            sock.settimeout(timeout)
+            sock.connect((raw_ip, port))
+            sock.close()
+            return "Succeeded"
+    except socket.timeout:
+        return "Timeout"
+    except ConnectionRefusedError:
+        return "ConnRefused"
+    except Exception:
+        return "Closed"
+
+def execute_single_probe(protocol: str, ip: str, port: str, timeout: int = 5, use_curl_cli: bool = False) -> str:
+    """
+    Routes probe to execute_single_curl (for HTTP/HTTPS) or execute_single_netcat (for TCP/UDP).
+    """
+    proto_lower = str(protocol).lower()
+    if proto_lower in ["tcp", "udp"]:
+        return execute_single_netcat(proto_lower, ip, port, timeout=timeout)
+    else:
+        return execute_single_curl(protocol, ip, port, timeout=timeout, use_curl_cli=use_curl_cli)
+
 def probe_vip(vip: Dict[str, Any], runs: int = 3, timeout: int = 5, use_curl_cli: bool = False) -> Dict[str, Any]:
     """
-    Runs specified number of curls (default 3) against a single virtual IP.
+    Runs specified number of probes (default 3) against a single virtual IP.
+    Executes HTTP/HTTPS curl checks or TCP/UDP netcat probes based on VIP protocol.
     """
     protocol = vip.get("protocol", "http")
     ip = vip.get("ip", "")
@@ -107,9 +189,8 @@ def probe_vip(vip: Dict[str, Any], runs: int = 3, timeout: int = 5, use_curl_cli
     
     response_codes = []
     for _ in range(runs):
-        code = execute_single_curl(protocol, ip, port, timeout=timeout, use_curl_cli=use_curl_cli)
+        code = execute_single_probe(protocol, ip, port, timeout=timeout, use_curl_cli=use_curl_cli)
         response_codes.append(code)
-        # Brief delay between runs
         time.sleep(0.1)
 
     result = dict(vip)
