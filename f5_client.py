@@ -156,11 +156,13 @@ class F5Client:
             
             status_obj = item.get("status", {})
             if isinstance(status_obj, dict):
-                avail_state = str(item.get("availabilityState") or status_obj.get("availabilityState", "")).lower()
-                enabled_state = str(item.get("enabledState") or status_obj.get("enabledState", "")).lower()
+                avail_state = str(status_obj.get("availabilityState") or item.get("availabilityState") or "").lower()
+                enabled_state = str(status_obj.get("enabledState") or item.get("enabledState") or "").lower()
+                status_reason = str(status_obj.get("statusReason") or "").lower()
             else:
                 avail_state = str(item.get("availabilityState", "")).lower()
                 enabled_state = str(item.get("enabledState", "")).lower()
+                status_reason = ""
 
             # Explicitly disregard virtuals that are disabled or offline
             if disabled or not enabled:
@@ -168,17 +170,13 @@ class F5Client:
             if "disabled" in enabled_state or "offline" in avail_state or "disabled" in avail_state or avail_state in ["offline", "disabled", "red"]:
                 continue
 
-            # Classify remaining virtuals: retain ONLY 'active' or 'unknown'
-            if avail_state in ["available", "green"]:
+            # Classify remaining virtuals based on F5 availabilityState:
+            if "available" in status_reason or avail_state in ["available", "green"]:
                 norm_state = "active"
             elif avail_state in ["unknown", "blue"]:
                 norm_state = "unknown"
-            elif not avail_state:
-                # Default for enabled virtuals with unpopulated availability state
-                norm_state = "unknown"
             else:
-                # Disregard any other availability states that are neither active nor unknown
-                continue
+                norm_state = "unknown"
 
             # Extract attached profiles and ipProtocol
             ip_protocol = str(item.get("ipProtocol", "")).lower()
@@ -330,6 +328,10 @@ class F5Client:
             # Disregard if stats explicitly report availability description as "offline"
             if avail_desc == "offline":
                 continue
+            elif avail_desc in ["available", "green"]:
+                vip["state"] = "active"
+            elif avail_desc in ["unknown", "blue"]:
+                vip["state"] = "unknown"
 
             filtered.append(vip)
 
@@ -346,5 +348,9 @@ class F5Client:
             avail_desc = cls.extract_availability_from_stats(stats_data)
             if avail_desc == "offline":
                 continue
+            elif avail_desc in ["available", "green"]:
+                vip["state"] = "active"
+            elif avail_desc in ["unknown", "blue"]:
+                vip["state"] = "unknown"
             filtered.append(vip)
         return filtered

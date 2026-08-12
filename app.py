@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import time
 from f5_client import F5Client
-from curl_checker import run_curl_checks_concurrently
+from curl_checker import run_curl_checks_sequentially
 from mock_data import get_mock_virtual_servers, simulate_mock_curl_checks
 from comparator import compare_pre_and_post_results
 
@@ -108,7 +108,6 @@ with st.sidebar:
     st.divider()
     st.header("🔍 Probe Settings")
     probe_timeout = st.slider("Curl Timeout (seconds)", min_value=1, max_value=15, value=5)
-    use_curl_cli = st.checkbox("Use System `curl` CLI Binary", value=True, help="Executes system curl command directly instead of Python requests.")
 
     st.divider()
     if st.button("🗑️ Reset All Stored Check Data"):
@@ -172,11 +171,10 @@ with tab_pre:
                         if mock_mode:
                             pre_results = simulate_mock_curl_checks(processed_vips, is_post_check=False)
                         else:
-                            pre_results = run_curl_checks_concurrently(
+                            pre_results = run_curl_checks_sequentially(
                                 processed_vips,
                                 runs=3,
-                                timeout=probe_timeout,
-                                use_curl_cli=use_curl_cli
+                                timeout=probe_timeout
                             )
 
                     # Store in session state
@@ -237,6 +235,23 @@ with tab_pre:
                 df_logs = df_pre[["name", "ip", "port", "protocol", "executed_command", "probe_log"]].copy()
                 df_logs.columns = ["Virtual Name", "IP Address", "Port", "Protocol", "Command Executed", "Detailed Probe Logs"]
                 st.dataframe(df_logs, use_container_width=True, hide_index=True)
+
+                st.divider()
+                st.markdown("#### 🔍 Interactive Verbose Log Inspector")
+                selected_vip_name = st.selectbox(
+                    "Select Virtual Server to inspect full raw stdout/stderr logs:",
+                    options=df_pre["name"].tolist(),
+                    key="select_pre_vip_log"
+                )
+                if selected_vip_name:
+                    vip_row = df_pre[df_pre["name"] == selected_vip_name].iloc[0]
+                    st.markdown(f"**Target URL / Host:** `{vip_row.get('ip')}:{vip_row.get('port')}` ({vip_row.get('protocol')})")
+                    st.markdown("**Command Executed:**")
+                    st.code(vip_row.get("executed_command", "N/A"), language="bash")
+                    
+                    raw_log = str(vip_row.get("probe_log", "N/A")).replace(" | Run ", "\n\nRun ")
+                    st.markdown("**Full Output & Verbose Trace (stdout, rc, stderr):**")
+                    st.code(raw_log, language="text")
             else:
                 st.info("No command logs recorded.")
 
@@ -284,11 +299,10 @@ with tab_post:
                         else:
                             post_target_vips = target_vips
 
-                        post_results = run_curl_checks_concurrently(
+                        post_results = run_curl_checks_sequentially(
                             post_target_vips,
                             runs=3,
-                            timeout=probe_timeout,
-                            use_curl_cli=use_curl_cli
+                            timeout=probe_timeout
                         )
 
                     # Store post results & compute comparison
@@ -355,6 +369,23 @@ with tab_post:
                         df_post_logs = df_post[["name", "ip", "port", "protocol", "executed_command", "probe_log"]].copy()
                         df_post_logs.columns = ["Virtual Name", "IP Address", "Port", "Protocol", "Command Executed", "Detailed Probe Logs"]
                         st.dataframe(df_post_logs, use_container_width=True, hide_index=True)
+
+                        st.divider()
+                        st.markdown("#### 🔍 Interactive Verbose Log Inspector")
+                        selected_post_vip_name = st.selectbox(
+                            "Select Virtual Server to inspect full raw stdout/stderr logs:",
+                            options=df_post["name"].tolist(),
+                            key="select_post_vip_log"
+                        )
+                        if selected_post_vip_name:
+                            post_vip_row = df_post[df_post["name"] == selected_post_vip_name].iloc[0]
+                            st.markdown(f"**Target URL / Host:** `{post_vip_row.get('ip')}:{post_vip_row.get('port')}` ({post_vip_row.get('protocol')})")
+                            st.markdown("**Command Executed:**")
+                            st.code(post_vip_row.get("executed_command", "N/A"), language="bash")
+                            
+                            post_raw_log = str(post_vip_row.get("probe_log", "N/A")).replace(" | Run ", "\n\nRun ")
+                            st.markdown("**Full Output & Verbose Trace (stdout, rc, stderr):**")
+                            st.code(post_raw_log, language="text")
 
 # -----------------------------------------------------------------------------
 # TAB 3: FULL COMPARISON & AUDIT REPORT

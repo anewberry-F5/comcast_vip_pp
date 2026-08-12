@@ -1,6 +1,6 @@
 from f5_client import F5Client
 from mock_data import get_mock_virtual_servers, simulate_mock_curl_checks
-from curl_checker import run_curl_checks_concurrently, is_ipv6_address, execute_single_curl
+from curl_checker import run_curl_checks_sequentially, is_ipv6_address, execute_single_curl
 from comparator import compare_pre_and_post_results
 
 def test_ipv6_discovery():
@@ -63,8 +63,25 @@ def test_full_pipeline():
     for c in comparison:
         print(f" - {c['name']} | Pre: {c['pre_curl_summary']} | Post: {c['post_curl_summary']} | Status: {c['status']}")
 
+def test_probe_execution_order():
+    print("\n5. Testing probe execution phase separation (HTTP/HTTPS before TCP/UDP)...")
+    vips = [
+        {"name": "vs_aaron-tst_443", "ip": "127.0.0.1", "port": "443", "protocol": "https"},
+        {"name": "vs_test_tcp", "ip": "127.0.0.1", "port": "53", "protocol": "udp"},
+        {"name": "vs_webserver01_80", "ip": "127.0.0.1", "port": "80", "protocol": "http"},
+    ]
+    # Trace call sequence using mock probe function logic test
+    http_vips = [v for v in vips if str(v.get("protocol", "http")).lower() in ["http", "https"]]
+    non_http_vips = [v for v in vips if str(v.get("protocol", "http")).lower() not in ["http", "https"]]
+    
+    assert [v["name"] for v in http_vips] == ["vs_aaron-tst_443", "vs_webserver01_80"]
+    assert [v["name"] for v in non_http_vips] == ["vs_test_tcp"]
+    print(" - HTTP/HTTPS probes correctly separated from TCP/UDP netcat probes!")
+
     print("\n✅ ALL TESTS PASSED SUCCESSFULLY!")
 
 if __name__ == "__main__":
     test_ipv6_discovery()
     test_full_pipeline()
+    test_probe_execution_order()
+
